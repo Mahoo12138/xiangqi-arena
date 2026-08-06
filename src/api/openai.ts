@@ -12,10 +12,12 @@ export interface StreamResult {
 }
 
 export interface StreamOptions {
-  /** 无数据块的看门狗超时（毫秒），默认 60000 */
-  timeoutMs?: number
-  /** 整个流式请求的总时长上限（毫秒），默认 180000。模型推理卡死反复输出时触发 */
+  /** 整个请求（含 fetch 建连）总时长上限（毫秒），默认 180000 */
   totalTimeoutMs?: number
+  /** 收到响应后，无数据块看门狗（毫秒），默认 60000 */
+  dataTimeoutMs?: number
+  /** 等待 HTTP 响应（建连）超时（毫秒），默认 30000 */
+  headersTimeoutMs?: number
   /** 外部取消信号 */
   signal?: AbortSignal
 }
@@ -31,8 +33,10 @@ export async function streamChat(
   cb: StreamCallbacks = {},
   opts: StreamOptions = {},
 ): Promise<StreamResult> {
-  const timeoutMs = opts.timeoutMs ?? 60_000
   const totalTimeoutMs = opts.totalTimeoutMs ?? 180_000
+  const dataTimeoutMs = opts.dataTimeoutMs ?? 60_000
+  const headersTimeoutMs = opts.headersTimeoutMs ?? 30_000
+
   const controller = new AbortController()
   const onOuterAbort = () => controller.abort()
   if (opts.signal) {
@@ -40,54 +44,56 @@ export async function streamChat(
     else opts.signal.addEventListener('abort', onOuterAbort, { once: true })
   }
 
-  let res: Response
-  try {
-    res = await fetch('/api/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, messages, stream: true, temperature: 0.4 }),
-      signal: controller.signal,
-    })
-  } catch (e) {
-    throw new TransientError(`请求失败：${String(e)}`)
-  }
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    if (res.status >= 500) {
-      throw new TransientError(`服务端错误 HTTP ${res.status}`)
-    }
-    throw new Error(`HTTP ${res.status}: ${text.slice(0, 300)}`)
-  }
-  if (!res.body) {
-    throw new TransientError('无响应体')
-  }
-
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let reasoning = ''
-  let content = ''
-  let promptTokens = 0
-  let completionTokens = 0
-
-  // 看门狗：N 秒无数据，或总时长超限（推理卡死）则中止，视为瞬态失败
   const startAt = Date.now()
-  let lastChunk = Date.now()
+  let respondedAt = 0
+  let lastChunk = 0
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
+
+  // 看门狗覆盖整个请求：无响应 / 无数据 / 总时长任一超限立即中止。
+  // 必须在 fetch 之前创建，否则建连假死时无人中止，调用方会永远挂起。
   const watchdog = setInterval(() => {
-    if (Date.now() - startAt > totalTimeoutMs) controller.abort()
-    else if (Date.now() - lastChunk > timeoutMs) controller.abort()
-  }, 2000)
+    const now = Date.now()
+    if (now - startAt > totalTimeoutMs) controller.abort()
+    else if (respondedAt === 0 && now - startAt > headersTimeoutMs) controller.abort()
+    else if (lastChunk !== 0 && now - lastChunk > dataTimeoutMs) controller.abort()
+  }, 500)
 
   try {
+    let res: Response
+    try {
+      res = await fetch('/api/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, messages, stream: true, temperature: 0.4 }),
+        signal: controller.signal,
+      })
+    } catch (e) {
+      if (controller.signal.aborted) throw new TransientError('请求超时或中止')
+      throw new TransientError(`请求失败：${String(e)}`)
+    }
+    respondedAt = Date.now()
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      if (res.status >= 500) throw new TransientError(`服务端错误 HTTP ${res.status}`)
+      throw new Error(`HTTP ${res.status}: ${text.slice(0, 300)}`)
+    }
+    if (!res.body) throw new TransientError('无响应体')
+
+    reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let reasoning = ''
+    let content = ''
+    let promptTokens = 0
+    let completionTokens = 0
+
     while (true) {
       let chunk: ReadableStreamReadResult<Uint8Array>
       try {
         chunk = await reader.read()
       } catch (e) {
-        if (controller.signal.aborted) {
-          throw new TransientError('流式响应超时或中止')
-        }
+        if (controller.signal.aborted) throw new TransientError('流式响应超时或中止')
         throw new TransientError(`读取中断：${String(e)}`)
       }
       if (chunk.done) break
@@ -129,23 +135,19 @@ export async function streamChat(
         }
       }
     }
-  } catch (e) {
-    if (e instanceof TransientError) throw e
-    if (controller.signal.aborted) throw new TransientError('流式响应中止')
-    throw e
+
+    // provider 未给 usage 时估算
+    if (!promptTokens && completionTokens === 0) {
+      completionTokens = estimateTokens(content + reasoning)
+    }
+
+    cb.onUsage?.({ promptTokens, completionTokens })
+    return { reasoning, content, promptTokens, completionTokens }
   } finally {
     clearInterval(watchdog)
-    reader.cancel().catch(() => {})
+    reader?.cancel().catch(() => {})
     if (opts.signal) opts.signal.removeEventListener('abort', onOuterAbort)
   }
-
-  // provider 未给 usage 时估算
-  if (!promptTokens && completionTokens === 0) {
-    completionTokens = estimateTokens(content + reasoning)
-  }
-
-  cb.onUsage?.({ promptTokens, completionTokens })
-  return { reasoning, content, promptTokens, completionTokens }
 }
 
 function estimateTokens(text: string): number {

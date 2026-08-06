@@ -12,8 +12,8 @@ const MAX_INVALID = 3 // 非法走法重试上限
 const MAX_ATTEMPTS = 6 // 总尝试兜底
 
 // 单次请求总时长：随棋局深入自适应延长（后期每步推理久），可用环境变量覆盖
-const TOTAL_BASE = 240_000 // 开局基准 4 分钟
-const TOTAL_STEP = 4000 // 每走一步 +4s
+const TOTAL_BASE = 600_000 // 开局基准 10 分钟
+const TOTAL_STEP = 10_000 // 每走一步 +10s
 const TOTAL_MAX = 1_800_000 // 上限 30 分钟
 const ENV_TOTAL = Number(import.meta.env.VITE_LLM_TOTAL_TIMEOUT_MS)
 function totalTimeoutFor(moveCount: number): number {
@@ -326,7 +326,7 @@ export const useGameStore = defineStore('game', () => {
             onUsage: (u) => {
               liveTokens.value = u.completionTokens
             },
-          }, { timeoutMs: 60_000, totalTimeoutMs: totalTimeoutFor(game.value.moveCount), signal: ac.signal })
+          }, { dataTimeoutMs: 60_000, totalTimeoutMs: totalTimeoutFor(game.value.moveCount), signal: ac.signal })
         } catch (e) {
           currentAborter = null
           if (manualAbort) {

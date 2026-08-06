@@ -57,35 +57,31 @@ function toggle(n: number) {
       <template v-for="pair in pairs" :key="pair.no">
         <div class="tr">
           <div class="no">{{ pair.no }}</div>
-          <div class="mv" :class="{ open: openReason === pair.redIdx }">
-            <template v-if="pair.red">
-              <div class="cell">
-                <span class="p red-p">{{ fmtPiece(pair.red) }}</span>
-                <span class="cn">{{ pair.red.cn }}</span>
-                <span class="wxf">{{ pair.red.wxf }}</span>
-                <span class="chip time">{{ fmtMs(pair.red.thinkMs) }}</span>
-                <span class="chip tok">{{ pair.red.tokens }}</span>
-              </div>
-              <button v-if="pair.red.reasoning" class="reason-toggle" :class="{ on: openReason === pair.redIdx }" @click="toggle(pair.redIdx)">推理查看 · Reasoning</button>
-              <Transition name="reason">
-                <pre v-if="openReason === pair.redIdx" class="reason">{{ pair.red.reasoning }}</pre>
-              </Transition>
-            </template>
+          <div v-if="pair.red" class="mv" :class="{ open: openReason === pair.redIdx }">
+            <div class="cell">
+              <span class="p red-p">{{ fmtPiece(pair.red) }}</span>
+              <span class="cn">{{ pair.red.cn }}</span>
+              <span class="wxf">{{ pair.red.wxf }}</span>
+              <span class="chip time">{{ fmtMs(pair.red.thinkMs) }}</span>
+              <span class="chip tok">{{ pair.red.tokens }}</span>
+            </div>
+            <button v-if="pair.red.reasoning" class="reason-toggle" :class="{ on: openReason === pair.redIdx }" @click="toggle(pair.redIdx)">推理查看 · Reasoning</button>
+            <Transition name="reason">
+              <pre v-if="openReason === pair.redIdx" class="reason">{{ pair.red.reasoning }}</pre>
+            </Transition>
           </div>
-          <div class="mv" :class="{ open: openReason === pair.blackIdx }">
-            <template v-if="pair.black">
-              <div class="cell">
-                <span class="p blk-p">{{ fmtPiece(pair.black) }}</span>
-                <span class="cn">{{ pair.black.cn }}</span>
-                <span class="wxf">{{ pair.black.wxf }}</span>
-                <span class="chip time">{{ fmtMs(pair.black.thinkMs) }}</span>
-                <span class="chip tok">{{ pair.black.tokens }}</span>
-              </div>
-              <button v-if="pair.black.reasoning" class="reason-toggle" :class="{ on: openReason === pair.blackIdx }" @click="toggle(pair.blackIdx)">推理查看 · Reasoning</button>
-              <Transition name="reason">
-                <pre v-if="openReason === pair.blackIdx" class="reason">{{ pair.black.reasoning }}</pre>
-              </Transition>
-            </template>
+          <div v-if="pair.black" class="mv" :class="{ open: openReason === pair.blackIdx }">
+            <div class="cell">
+              <span class="p blk-p">{{ fmtPiece(pair.black) }}</span>
+              <span class="cn">{{ pair.black.cn }}</span>
+              <span class="wxf">{{ pair.black.wxf }}</span>
+              <span class="chip time">{{ fmtMs(pair.black.thinkMs) }}</span>
+              <span class="chip tok">{{ pair.black.tokens }}</span>
+            </div>
+            <button v-if="pair.black.reasoning" class="reason-toggle" :class="{ on: openReason === pair.blackIdx }" @click="toggle(pair.blackIdx)">推理查看 · Reasoning</button>
+            <Transition name="reason">
+              <pre v-if="openReason === pair.blackIdx" class="reason">{{ pair.black.reasoning }}</pre>
+            </Transition>
           </div>
         </div>
       </template>
