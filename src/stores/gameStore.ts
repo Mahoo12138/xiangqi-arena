@@ -47,19 +47,6 @@ function backoff(n: number) {
   return 1000 * Math.pow(2, n - 1) + Math.random() * 250
 }
 
-// 轮询等待条件成立（超时则直接返回）
-function waitFor(cond: () => boolean, timeoutMs: number) {
-  return new Promise<void>((resolve) => {
-    const start = Date.now()
-    const t = setInterval(() => {
-      if (cond() || Date.now() - start > timeoutMs) {
-        clearInterval(t)
-        resolve()
-      }
-    }, 50)
-  })
-}
-
 export const useGameStore = defineStore('game', () => {
   const models = ref<string[]>(availableModels())
   const defaultModel = models.value[0] || 'deepseek-v4-flash-0731'
@@ -87,6 +74,18 @@ export const useGameStore = defineStore('game', () => {
   // 当前在途请求的中止函数 + 手动干预标记
   let currentAborter: (() => void) | null = null
   let manualAbort = false
+
+  // 对局代次：重新开局/弃局/读档时递增，使旧 AI 请求的响应作废
+  let gameEpoch = 0
+  // 当前在途 AI 回合的 Promise，供重试/重新开局等待其结束
+  let activeTurn: Promise<void> | null = null
+
+  // 使当前对局失效：作废在途请求，防止旧响应落到新棋盘
+  function invalidateGame() {
+    gameEpoch++
+    currentAborter?.()
+    currentAborter = null
+  }
 
   const turn = computed(() => game.value.turn)
   const result = computed(() => game.value.result)
@@ -126,6 +125,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function loadState() {
+    invalidateGame() // 作废任何在途请求
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (!raw) return
@@ -162,6 +162,7 @@ export const useGameStore = defineStore('game', () => {
   /* ---------- 生命周期 ---------- */
 
   function startGame() {
+    invalidateGame() // 作废旧请求，避免其响应落到新棋盘
     stopTimer()
     game.value = new Game()
     syncBoard()
@@ -179,7 +180,7 @@ export const useGameStore = defineStore('game', () => {
 
   // 弃局：清空内存与持久化，恢复为未开局状态（不自动走棋）
   function discard() {
-    stopTurn() // 先中止在途请求，避免卡死流继续空耗
+    invalidateGame() // 作废旧请求并作废其响应，避免写回新棋盘
     stopTimer()
     game.value = new Game()
     syncBoard()
@@ -194,10 +195,12 @@ export const useGameStore = defineStore('game', () => {
     currentAborter?.()
   }
 
-  // 中止并立即重试当前行动方的一步
+  // 中止并立即重试当前行动方的一步：等待旧任务真正结束后再启动新任务
   async function retryTurn() {
-    stopTurn()
-    await waitFor(() => !busy.value, 3000)
+    currentAborter?.()
+    manualAbort = true
+    await activeTurn
+    manualAbort = false
     if (result.value) {
       playing.value = false
       return
@@ -205,7 +208,7 @@ export const useGameStore = defineStore('game', () => {
     const side = turn.value
     if (currentPlayer(side).isHuman) return
     playing.value = true
-    kick()
+    activeTurn = aiTurn(side, { continueAfterMove: true })
   }
 
   function stopTimer() {
@@ -265,7 +268,7 @@ export const useGameStore = defineStore('game', () => {
     }
     const side = turn.value
     if (currentPlayer(side).isHuman) return
-    if (playing.value) void aiTurn(side)
+    if (playing.value) activeTurn = aiTurn(side, { continueAfterMove: true })
   }
 
   // 暂停
@@ -279,16 +282,17 @@ export const useGameStore = defineStore('game', () => {
     kick()
   }
 
-  // 单步（走一步 AI）
+  // 单步（只走一步 AI），不进入连续对弈
   function step() {
     if (result.value) return
     const side = turn.value
     if (currentPlayer(side).isHuman) return
-    playing.value = true
-    void aiTurn(side)
+    playing.value = false
+    activeTurn = aiTurn(side, { continueAfterMove: false })
   }
 
-  async function aiTurn(side: Side) {
+  async function aiTurn(side: Side, options: { continueAfterMove: boolean }): Promise<void> {
+    const epoch = gameEpoch
     if (busy.value || result.value) return
     if (turn.value !== side) return
     manualAbort = false
@@ -304,10 +308,14 @@ export const useGameStore = defineStore('game', () => {
     let lastInvalidReason: string | undefined // 仅用于提示模型的非法走法反馈
     let transientCount = 0
     let invalidCount = 0
-    let stopped = false // 用户手动中止
+    let stopped = false // 用户手动中止或对局已失效
 
     try {
       for (let attempt = 0; attempt < MAX_ATTEMPTS && !finalMove; attempt++) {
+        if (epoch !== gameEpoch) {
+          stopped = true
+          break
+        }
         const prompt = buildPrompt(game.value.board, side, game.value.moveHistory, lastInvalidReason)
         const messages = [
           { role: 'system', content: 'You are a Chinese Chess (Xiangqi) AI player. Output only a move.' },
@@ -327,6 +335,10 @@ export const useGameStore = defineStore('game', () => {
           }, { dataTimeoutMs: 60_000, totalTimeoutMs: totalTimeoutFor(game.value.moveCount), signal: ac.signal })
         } catch (e) {
           currentAborter = null
+          if (epoch !== gameEpoch) {
+            stopped = true
+            break
+          }
           if (manualAbort) {
             manualAbort = false
             stopped = true
@@ -342,6 +354,10 @@ export const useGameStore = defineStore('game', () => {
           throw e
         }
         currentAborter = null
+        if (epoch !== gameEpoch) {
+          stopped = true
+          break
+        }
 
         finalReasoning = res.reasoning
         finalTokens = res.completionTokens
@@ -366,7 +382,7 @@ export const useGameStore = defineStore('game', () => {
         finalMove = { from: legal.from, to: legal.to }
       }
 
-      if (finalMove) {
+      if (finalMove && epoch === gameEpoch) {
         applyMove(finalMove, {
           cn: '',
           wxf: '',
@@ -386,13 +402,13 @@ export const useGameStore = defineStore('game', () => {
       busy.value = false
     }
 
-    // 推进下一回合：仅当成功走子才推进
-    if (finalMove) {
+    // 推进下一回合：仅当本代仍有效、成功走子，且调用方要求续走时才继续
+    if (finalMove && epoch === gameEpoch) {
       if (result.value) {
         playing.value = false
-      } else if (playing.value) {
+      } else if (options.continueAfterMove && playing.value) {
         const next = opposite(side)
-        if (!currentPlayer(next).isHuman) void aiTurn(next)
+        if (!currentPlayer(next).isHuman) activeTurn = aiTurn(next, options)
       }
     }
   }
@@ -404,7 +420,7 @@ export const useGameStore = defineStore('game', () => {
       if (document.visibilityState !== 'visible') return
       const side = turn.value
       if (playing.value && !busy.value && !thinking.value && !result.value && !currentPlayer(side).isHuman) {
-        void aiTurn(side)
+        activeTurn = aiTurn(side, { continueAfterMove: true })
       }
     })
   }
