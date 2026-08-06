@@ -234,9 +234,7 @@ export const useGameStore = defineStore('game', () => {
 
   // 应用一步走法并推进
   function applyMove(move: { from: Pos; to: Pos }, meta: { cn: string; wxf: string; thinkMs: number; tokens: number; reasoning: string; error?: string }) {
-    const piece = game.value.board[move.from.rank][move.from.file]
-    if (!piece) return false
-    const legal = game.value.tryMove({ from: move.from, to: move.to, piece, captured: null })
+    const legal = game.value.tryMove(move.from, move.to)
     if (!legal) return false
     const rec = game.value.moveHistory[game.value.moveHistory.length - 1]
     rec.thinkMs = meta.thinkMs

@@ -16,7 +16,7 @@ const g = new Game()
 const moves = ['h2e2', 'h9g7', 'b0c2', 'b9c7', 'c2e3']
 for (const m of moves) {
   const mv = g.parseMove(m)
-  if (!mv || !g.tryMove(mv)) {
+  if (!mv || !g.tryMove(mv.from, mv.to)) {
     console.error(`move ${m} failed`)
     process.exit(1)
   }
@@ -45,7 +45,7 @@ check('还原后记谱可读', g2.moveHistory[0].cn.length > 0, g2.moveHistory[0
 
 // 还可继续走子
 const next = g2.parseMove('e3e4')
-check('还原后可继续走子', !!next && g2.tryMove(next!), `turn=${g2.turn}`)
+check('还原后可继续走子', !!next && g2.tryMove(next!.from, next!.to), `turn=${g2.turn}`)
 
 check('初始棋盘仍正常', initialBoard()[0][0] === 'R')
 

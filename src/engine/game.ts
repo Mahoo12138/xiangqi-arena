@@ -1,6 +1,6 @@
-import type { Board, GameResult, Move, MoveRecord, Side } from '../types'
+import type { Board, GameResult, Move, MoveRecord, Pos, Side } from '../types'
 import { cloneBoard, initialBoard, opposite } from './board'
-import { genLegalMoves, hasLegalMove, isInCheck, isLegal } from './moves'
+import { genLegalMoves, hasLegalMove, isInCheck } from './moves'
 import { notation } from './notation'
 
 export class Game {
@@ -22,10 +22,20 @@ export class Game {
     return genLegalMoves(this.board, this.turn)
   }
 
-  // 尝试落子，返回是否成功
-  tryMove(move: Move): boolean {
+  // 尝试落子，返回是否成功。只接受权威合法走法：调用方传坐标，
+  // 由 Game 内部匹配 legalMoveList，杜绝棋子瞬移、走对方棋子等伪造 Move。
+  tryMove(from: Pos, to: Pos): boolean {
     if (this.result) return false
-    if (!isLegal(this.board, move, this.turn)) return false
+
+    const move = this.legalMoveList.find(
+      (item) =>
+        item.from.rank === from.rank &&
+        item.from.file === from.file &&
+        item.to.rank === to.rank &&
+        item.to.file === to.file,
+    )
+    if (!move) return false
+
     const { cn, wxf } = notation(move)
     this.board[move.to.rank][move.to.file] = move.piece
     this.board[move.from.rank][move.from.file] = null

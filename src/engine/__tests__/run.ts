@@ -35,7 +35,7 @@ function check(name: string, cond: boolean, detail?: string) {
   const n1 = notation(m1!)
   check('炮二平五 记谱', n1.cn === '炮二平五', `got ${n1.cn}`)
   check('C2=5 记法', n1.wxf === 'C2=5', `got ${n1.wxf}`)
-  g.tryMove(m1!)
+  g.tryMove(m1!.from, m1!.to)
   // 黑马8进7: 从 h9 到 g7 (黑右马到中路)
   const m2 = g.parseMove('h9g7')
   check('h9g7 合法', g.findLegalByText('h9g7') !== null)
@@ -47,8 +47,8 @@ function check(name: string, cond: boolean, detail?: string) {
 // 3. 炮隔子吃
 {
   const g = new Game()
-  g.tryMove(g.parseMove('h2e2')!) // 红炮二平五到 e2
-  g.tryMove(g.parseMove('h9g7')!) // 黑马8进7
+  g.tryMove(g.parseMove('h2e2')!.from, g.parseMove('h2e2')!.to) // 红炮二平五到 e2
+  g.tryMove(g.parseMove('h9g7')!.from, g.parseMove('h9g7')!.to) // 黑马8进7
   // 红炮 e2 隔 e3 红兵打黑卒 e6（中间恰好一个子）
   const cc = g.legalMoveList.find(
     (m) => m.from.file === 4 && m.from.rank === 2 && m.to.file === 4 && m.to.rank === 6,
@@ -136,6 +136,27 @@ function check(name: string, cond: boolean, detail?: string) {
   b[0][4] = 'K'
   // 黑将 e9 被 i8 车控制第8行 -> e8 被控；e9 可到 d9/f9，d9被红帅? 不。 此构造复杂，改为验证 stalemate 更简单
   check('引擎可生成走法（基础）', genLegalMoves(b, 'red').length >= 0)
+}
+
+// 10. tryMove 只接受合法走法：拒绝瞬移 / 移动对方棋子 / 出界
+{
+  const g = new Game()
+  check('拒绝瞬移（红车 a0->f5）', !g.tryMove({ rank: 0, file: 0 }, { rank: 5, file: 5 }))
+  check('拒绝移动对方棋子（黑马 b9->c7）', !g.tryMove({ rank: 9, file: 1 }, { rank: 7, file: 2 }))
+  check('拒绝出界（a0->a9）', !g.tryMove({ rank: 0, file: 0 }, { rank: 9, file: 0 }))
+  check('合法走法仍可执行', g.tryMove({ rank: 2, file: 7 }, { rank: 2, file: 4 })) // 红炮二平五
+}
+
+// 11. 吃子历史 captured 正确
+{
+  const g = new Game()
+  g.tryMove({ rank: 2, file: 7 }, { rank: 2, file: 4 }) // 红炮 h2-e2（二平五），e2 空
+  g.tryMove({ rank: 9, file: 7 }, { rank: 7, file: 6 }) // 黑马 h9-g7（马8进7）
+  // 红炮 e2 隔 e3 红兵打黑卒 e6（中间恰好一个子）
+  const ok = g.tryMove({ rank: 2, file: 4 }, { rank: 6, file: 4 })
+  check('炮打卒落子成功', ok)
+  const rec = g.moveHistory[g.moveHistory.length - 1]
+  check('吃子历史记录 captured = 黑卒', rec.move.captured === 'p', `got ${rec.move.captured}`)
 }
 
 console.log(`\n结果: ${pass} 通过, ${fail} 失败`)
