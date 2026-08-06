@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { useGameStore } from '../stores/gameStore'
 const router = useRouter()
+const store = useGameStore()
 
 const FEATURES = [
   {
@@ -26,6 +28,12 @@ const FEATURES = [
 
 <template>
   <div class="landing">
+    <div v-if="store.hasResumable" class="resume-banner">
+      <span class="rb-text">有未完成的对局 · 已行 {{ store.moveCount }} 步</span>
+      <button class="btn" @click="router.push('/game')">继续对局 · Resume</button>
+      <button class="btn ghost" @click="store.discard(); router.push('/game')">弃局重开 · New</button>
+    </div>
+
     <div class="hero">
       <div class="hero-inner">
         <span class="seal">弈</span>
@@ -61,6 +69,24 @@ const FEATURES = [
 .landing {
   max-width: 1000px;
   margin: 0 auto;
+}
+.resume-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(201, 168, 106, 0.45);
+  background: linear-gradient(180deg, rgba(201, 168, 106, 0.1), rgba(23, 26, 31, 0.7));
+  animation: rise-in var(--dur-slow) var(--ease-out) both;
+}
+.rb-text {
+  margin-right: auto;
+  color: var(--gold);
+  font-family: var(--font-display);
+  letter-spacing: 1px;
 }
 .hero {
   position: relative;

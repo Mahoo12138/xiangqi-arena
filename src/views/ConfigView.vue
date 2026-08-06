@@ -15,7 +15,7 @@ const draft = reactive<MatchConfig>({
 const models = store.models
 
 function save() {
-  store.config = JSON.parse(JSON.stringify(draft))
+  store.updateConfig(JSON.parse(JSON.stringify(draft)))
   router.push('/game')
 }
 </script>

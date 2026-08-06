@@ -25,6 +25,8 @@ const activeSide = computed<Side | null>(() => {
       <button v-if="store.playing && !store.result" class="btn" @click="store.pause">暂停 · Pause</button>
       <button v-else class="btn" @click="store.resume">继续 · Resume</button>
       <button class="btn ghost" @click="store.step">单步 · Step</button>
+      <button v-if="store.thinking" class="btn retry" @click="store.retryTurn">重试此步 · Retry</button>
+      <button v-if="store.moveCount > 0 || store.thinking" class="btn ghost" @click="store.discard">弃局重开 · Discard</button>
       <button class="btn ghost" @click="router.push('/config')">配置 · Config</button>
       <span class="tip">空格 Space = 暂停/继续</span>
     </div>
@@ -93,6 +95,26 @@ const activeSide = computed<Side | null>(() => {
   margin-left: auto;
   color: var(--muted);
   font-size: 12px;
+}
+.btn.retry {
+  background: transparent;
+  color: var(--gold);
+  border: 1px solid var(--gold);
+  box-shadow: none;
+  animation: retry-pulse 1.6s var(--ease-in-out) infinite;
+}
+.btn.retry:hover {
+  background: rgba(201, 168, 106, 0.12);
+  filter: none;
+}
+@keyframes retry-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(201, 168, 106, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(201, 168, 106, 0.12);
+  }
 }
 .layout {
   flex: 1;
