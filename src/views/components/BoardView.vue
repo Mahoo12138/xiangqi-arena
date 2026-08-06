@@ -9,14 +9,9 @@ const store = useGameStore()
 const CELL = 50
 const PAD = 12
 
-// 棋盘为 10 条横线 × 9 条竖线。显式渲染，避免背景平铺产生的多余边线。
-const H_LINES = 10
-const V_LINES = 9
-
-// 尺寸按“线段之间的间隔”计：N 条线只有 N-1 个间隔。
-// 9 条竖线夹 8 个间隔（宽）；10 条横线夹 9 个间隔（高）。
-const W = (V_LINES - 1) * CELL + PAD * 2
-const H = (H_LINES - 1) * CELL + PAD * 2
+// 尺寸按“线段之间的间隔”计：9 条竖线夹 8 个间隔（宽）；10 条横线夹 9 个间隔（高）。
+const W = 8 * CELL + PAD * 2
+const H = 9 * CELL + PAD * 2
 
 const selected = ref<Pos | null>(null)
 
@@ -82,18 +77,30 @@ function onCell(rank: number, file: number) {
   <div class="board-wrap">
     <div class="board" :style="{ width: W + 'px', height: H + 'px' }">
       <div class="grid-lines">
-        <div
-          v-for="i in H_LINES"
-          :key="'h' + i"
-          class="h-line"
-          :style="{ top: PAD + (i - 1) * CELL + 'px', left: PAD + 'px', right: PAD + 'px' }"
-        ></div>
-        <div
-          v-for="i in V_LINES"
-          :key="'v' + i"
-          class="v-line"
-          :style="{ left: PAD + (i - 1) * CELL + 'px', top: PAD + 'px', bottom: PAD + 'px' }"
-        ></div>
+        <svg class="grid" :width="W" :height="H">
+          <!-- 横线：10 条，从 rank9(顶) 到 rank0(底) -->
+          <line
+            v-for="r in 10"
+            :key="'h' + r"
+            :x1="PAD"
+            :y1="PAD + (r - 1) * CELL"
+            :x2="W - PAD"
+            :y2="PAD + (r - 1) * CELL"
+          />
+          <!-- 竖线：边线 a/i 贯穿河界 -->
+          <line v-for="f in [1, 9]" :key="'ve' + f" :x1="PAD + (f - 1) * CELL" :y1="PAD" :x2="PAD + (f - 1) * CELL" :y2="H - PAD" />
+          <!-- 竖线：内部 b..h 在河界处断开 -->
+          <template v-for="f in [2, 3, 4, 5, 6, 7, 8]" :key="'vi' + f">
+            <line :x1="PAD + (f - 1) * CELL" :y1="PAD" :x2="PAD + (f - 1) * CELL" :y2="PAD + 4 * CELL" />
+            <line :x1="PAD + (f - 1) * CELL" :y1="PAD + 5 * CELL" :x2="PAD + (f - 1) * CELL" :y2="H - PAD" />
+          </template>
+          <!-- 红方九宫斜线（rank0-2） -->
+          <line :x1="PAD + 3 * CELL" :y1="PAD + 9 * CELL" :x2="PAD + 5 * CELL" :y2="PAD + 7 * CELL" />
+          <line :x1="PAD + 5 * CELL" :y1="PAD + 9 * CELL" :x2="PAD + 3 * CELL" :y2="PAD + 7 * CELL" />
+          <!-- 黑方九宫斜线（rank7-9） -->
+          <line :x1="PAD + 3 * CELL" :y1="PAD + 2 * CELL" :x2="PAD + 5 * CELL" :y2="PAD" />
+          <line :x1="PAD + 5 * CELL" :y1="PAD + 2 * CELL" :x2="PAD + 3 * CELL" :y2="PAD" />
+        </svg>
       </div>
       <div class="river"><span>楚 河</span><span>漢 界</span></div>
 
@@ -120,8 +127,8 @@ function onCell(rank: number, file: number) {
           :key="t.rank + '-' + t.file"
           class="mark"
           :style="{
-            left: PAD + t.file * CELL + CELL / 2 + 'px',
-            top: PAD + (9 - t.rank) * CELL + CELL / 2 + 'px',
+            left: PAD + t.file * CELL + 'px',
+            top: PAD + (9 - t.rank) * CELL + 'px',
           }"
         ></span>
       </div>
@@ -168,15 +175,14 @@ function onCell(rank: number, file: number) {
   inset: 0;
   pointer-events: none;
 }
-.h-line {
+.grid {
   position: absolute;
-  height: 1px;
-  background: rgba(110, 80, 36, 0.7);
+  inset: 0;
 }
-.v-line {
-  position: absolute;
-  width: 1px;
-  background: rgba(110, 80, 36, 0.7);
+.grid line {
+  stroke: rgba(110, 80, 36, 0.75);
+  stroke-width: 1.5;
+  shape-rendering: geometricPrecision;
 }
 .river {
   position: absolute;

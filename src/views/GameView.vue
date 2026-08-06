@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '../stores/gameStore'
 import type { Side } from '../types'
@@ -9,6 +9,19 @@ import MovePanel from './components/MovePanel.vue'
 
 const router = useRouter()
 const store = useGameStore()
+
+// 空格 = 暂停/继续（与顶部提示一致）。输入框/文本区中不拦截。
+function onKeydown(e: KeyboardEvent) {
+  if (e.code !== 'Space') return
+  const tag = (e.target as HTMLElement | null)?.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+  e.preventDefault()
+  if (store.result) return
+  if (store.playing) store.pause()
+  else store.resume()
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 // 高亮方：对局中为当前行棋方，结束后为胜方
 const activeSide = computed<Side | null>(() => {
