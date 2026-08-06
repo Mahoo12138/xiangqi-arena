@@ -10,9 +10,10 @@
     "preview": "vite preview",
     "start": "node --env-file-if-exists=.env server/index.mjs",
     "test:engine": "vite-node src/engine/__tests__/run.ts",
+    "test:format": "vite-node src/engine/__tests__/format.ts",
     "test:persist": "vite-node src/engine/__tests__/persist.ts",
     "test:api": "vite-node src/api/__tests__/timeout.ts && vite-node src/api/__tests__/first-byte-timeout.ts",
-    "test": "npm run test:engine && npm run test:persist && npm run test:api"
+    "test": "npm run test:engine && npm run test:format && npm run test:persist && npm run test:api"
   },
   "dependencies": {
     "pinia": "^2.2.6",

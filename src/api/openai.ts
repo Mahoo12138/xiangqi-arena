@@ -170,13 +170,10 @@ function estimateTokens(text: string): number {
   return Math.ceil(cjk * 0.6 + words)
 }
 
-// 从模型回答中解析走法坐标（容忍 JSON、引号、括号、多余文字）
-export function extractMove(text: string): string | null {
-  const cleaned = text
-    .replace(/```/g, '')
-    .replace(/[{}"']/g, '')
-    .replace(/move\s*[:：]\s*/i, '')
-  const m = cleaned.match(/([a-i]{1}\d{1}\s*[-—－]?\s*[a-i]{1}\d{1})/)
+// 从模型回答中解析走法编号（容忍 JSON、引号、空白与多余文字）。只取第一个整数。
+export function extractMoveIndex(text: string): number | null {
+  const cleaned = text.replace(/```/g, '').replace(/[{}"'\s]/g, '')
+  const m = cleaned.match(/\d+/)
   if (!m) return null
-  return m[1].replace(/\s*[-—－]\s*/g, '')
+  return Number(m[0])
 }

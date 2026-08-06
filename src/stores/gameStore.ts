@@ -2,8 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { Game } from '../engine/game'
 import type { Board, PlayerConfig, Pos, Side } from '../types'
-import { buildPrompt } from '../engine/format'
-import { extractMove, streamChat, TransientError } from '../api/openai'
+import { buildPrompt, SYSTEM_PROMPT } from '../engine/format'
+import { extractMoveIndex, streamChat, TransientError } from '../api/openai'
 import { opposite } from '../engine/board'
 
 const STORAGE_KEY = 'xiangqi-arena:game:v1'
@@ -323,9 +323,10 @@ export const useGameStore = defineStore('game', () => {
           stopped = true
           break
         }
-        const prompt = buildPrompt(game.value.board, side, game.value.moveHistory, lastInvalidReason)
+        const legalMoves = game.value.legalMoveList
+        const prompt = buildPrompt(game.value.board, side, game.value.moveHistory, legalMoves, lastInvalidReason)
         const messages = [
-          { role: 'system', content: 'You are a Chinese Chess (Xiangqi) AI player. Output only a move.' },
+          { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: prompt },
         ]
 
@@ -370,18 +371,18 @@ export const useGameStore = defineStore('game', () => {
         finalTokens = res.completionTokens
         liveTokens.value = res.completionTokens
 
-        const moveText = extractMove(res.content)
-        if (!moveText) {
+        const moveIndex = extractMoveIndex(res.content)
+        if (moveIndex === null) {
           invalidCount++
-          lastInvalidReason = `无法从回答中解析出走法坐标。回答: "${res.content.slice(0, 100)}"`
+          lastInvalidReason = `Could not parse a move index from your reply: "${res.content.slice(0, 100)}"`
           if (invalidCount >= MAX_INVALID) throw new Error(lastInvalidReason)
           finalError = lastInvalidReason
           continue
         }
-        const legal = game.value.findLegalByText(moveText)
+        const legal = legalMoves[moveIndex]
         if (!legal) {
           invalidCount++
-          lastInvalidReason = `走法 "${moveText}" 不是合法走法`
+          lastInvalidReason = `Move index ${moveIndex} is outside the legal move list`
           if (invalidCount >= MAX_INVALID) throw new Error(lastInvalidReason)
           finalError = lastInvalidReason
           continue
