@@ -195,6 +195,13 @@ export const useGameStore = defineStore('game', () => {
     currentAborter?.()
   }
 
+  // 中止在途请求并暂停对局（离开对局页时调用，避免后台继续烧 Token）。
+  // 通过作废代次保证被中止的请求不会把走法写回棋盘。
+  function abortAndPause() {
+    invalidateGame()
+    playing.value = false
+  }
+
   // 中止并立即重试当前行动方的一步：等待旧任务真正结束后再启动新任务
   async function retryTurn() {
     currentAborter?.()
@@ -452,6 +459,7 @@ export const useGameStore = defineStore('game', () => {
     updateConfig,
     discard,
     stopTurn,
+    abortAndPause,
     retryTurn,
     humanMove,
     pause,
