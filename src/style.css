@@ -1,0 +1,223 @@
+:root {
+  /* 中国风 · 墨韵底色 */
+  --ink: #0e1013; /* 玄墨 */
+  --ink-2: #14161b;
+  --paper: #eae3d2; /* 宣纸暖白 */
+  --gray-ink: #9a907e; /* 灰墨 */
+  --vermilion: #c8402e; /* 朱砂 */
+  --gold: #c9a86a; /* 鎏金 */
+  --jade: #5aa89c; /* 青玉（科技数据） */
+  --lacquer: #171a1f; /* 漆面面板 */
+  --lacquer-2: #20242a;
+
+  /* 语义别名（兼容既有组件） */
+  --bg: var(--ink);
+  --panel: var(--lacquer);
+  --panel-2: var(--lacquer-2);
+  --border: #2b3037;
+  --text: var(--paper);
+  --muted: var(--gray-ink);
+  --red: var(--vermilion);
+  --black: #39424e;
+  --accent: var(--vermilion);
+
+  /* 字体：楷宋为骨，黑体为体 */
+  --font-display: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
+  --font-body: 'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-hud: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+
+  /* 动效基元 */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --dur-fast: 150ms;
+  --dur-base: 220ms;
+  --dur-slow: 300ms;
+
+  font-family: var(--font-body);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  background:
+    radial-gradient(1100px 700px at 78% -12%, rgba(90, 168, 156, 0.07), transparent 60%),
+    radial-gradient(900px 640px at 6% 112%, rgba(200, 64, 46, 0.06), transparent 60%),
+    radial-gradient(1400px 900px at 50% 50%, rgba(255, 255, 255, 0.015), transparent 70%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+.topbar,
+.content {
+  position: relative;
+  z-index: 1;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 24px;
+  background: rgba(14, 16, 19, 0.72);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--paper);
+  text-decoration: none;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.brand:hover {
+  opacity: 0.85;
+}
+.brand .seal {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--vermilion);
+  color: var(--paper);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 0 14px rgba(200, 64, 46, 0.45);
+}
+.brand .zh {
+  color: var(--paper);
+}
+.brand .en {
+  color: var(--muted);
+  font-family: var(--font-hud);
+  font-size: 11px;
+  letter-spacing: 3px;
+  font-weight: 500;
+}
+
+.content {
+  flex: 1;
+  padding: 24px;
+}
+
+/* 按钮：朱砂主色，鎏金描边 */
+.btn {
+  background: var(--vermilion);
+  color: #fff;
+  border: 1px solid rgba(200, 64, 46, 0.7);
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(200, 64, 46, 0.25);
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    filter 200ms var(--ease),
+    background-color 200ms var(--ease),
+    box-shadow 200ms var(--ease);
+}
+.btn:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 3px 18px rgba(200, 64, 46, 0.4);
+}
+.btn:active {
+  transform: scale(0.97);
+}
+.btn.ghost {
+  background: transparent;
+  color: var(--paper);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+.btn.ghost:hover {
+  background: var(--panel-2);
+  border-color: var(--gold);
+  filter: none;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+/* 浏览器表面：选区朱砂暖调 */
+::selection {
+  background: rgba(201, 168, 106, 0.3);
+  color: var(--paper);
+}
+input::selection,
+textarea::selection {
+  background: rgba(90, 168, 156, 0.28);
+}
+input,
+textarea {
+  caret-color: var(--jade);
+}
+
+/* 自定义滚动条 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+  border: 2px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gray-ink);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* 减弱动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
