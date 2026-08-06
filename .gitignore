@@ -5,3 +5,12 @@ dist
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
+
+# 构建/编译产物
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# 本地工具配置
+.claude/
+*.log
