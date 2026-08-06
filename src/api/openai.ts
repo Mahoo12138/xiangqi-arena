@@ -14,10 +14,12 @@ export interface StreamResult {
 export interface StreamOptions {
   /** 整个请求（含 fetch 建连）总时长上限（毫秒），默认 180000 */
   totalTimeoutMs?: number
-  /** 收到响应后，无数据块看门狗（毫秒），默认 60000 */
-  dataTimeoutMs?: number
   /** 等待 HTTP 响应（建连）超时（毫秒），默认 30000 */
   headersTimeoutMs?: number
+  /** 响应头已收到但迟迟无首个数据块（毫秒），默认 60000 */
+  firstByteTimeoutMs?: number
+  /** 收到数据后，相邻数据块间隔看门狗（毫秒），默认 60000 */
+  dataTimeoutMs?: number
   /** 外部取消信号 */
   signal?: AbortSignal
 }
@@ -36,6 +38,7 @@ export async function streamChat(
   const totalTimeoutMs = opts.totalTimeoutMs ?? 180_000
   const dataTimeoutMs = opts.dataTimeoutMs ?? 60_000
   const headersTimeoutMs = opts.headersTimeoutMs ?? 30_000
+  const firstByteTimeoutMs = opts.firstByteTimeoutMs ?? 60_000
 
   const controller = new AbortController()
   const onOuterAbort = () => controller.abort()
@@ -45,17 +48,19 @@ export async function streamChat(
   }
 
   const startAt = Date.now()
-  let respondedAt = 0
-  let lastChunk = 0
+  let respondedAt = 0 // 收到响应头
+  let lastChunkAt = 0 // 收到最后一个数据块
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
 
-  // 看门狗覆盖整个请求：无响应 / 无数据 / 总时长任一超限立即中止。
+  // 看门狗覆盖整个请求，按阶段区分：
+  //  建连超时（无响应头）> 首字节超时（有响应头、无数据块）> 数据块间隔超时 > 总时长。
   // 必须在 fetch 之前创建，否则建连假死时无人中止，调用方会永远挂起。
   const watchdog = setInterval(() => {
     const now = Date.now()
     if (now - startAt > totalTimeoutMs) controller.abort()
     else if (respondedAt === 0 && now - startAt > headersTimeoutMs) controller.abort()
-    else if (lastChunk !== 0 && now - lastChunk > dataTimeoutMs) controller.abort()
+    else if (respondedAt !== 0 && lastChunkAt === 0 && now - startAt > firstByteTimeoutMs) controller.abort()
+    else if (lastChunkAt !== 0 && now - lastChunkAt > dataTimeoutMs) controller.abort()
   }, 500)
 
   try {
@@ -88,6 +93,43 @@ export async function streamChat(
     let promptTokens = 0
     let completionTokens = 0
 
+    const handleLine = (line: string) => {
+      if (!line.startsWith('data:')) return
+      const data = line.slice(5).trim()
+      if (data === '[DONE]' || !data) return
+      let parsed: any
+      try {
+        parsed = JSON.parse(data)
+      } catch {
+        return
+      }
+      const choice = parsed.choices?.[0]
+      if (choice?.delta) {
+        const d = choice.delta
+        if (typeof d.reasoning_content === 'string' && d.reasoning_content) {
+          reasoning += d.reasoning_content
+          cb.onReasoning?.(reasoning)
+        }
+        if (typeof d.content === 'string' && d.content) {
+          content += d.content
+          cb.onContent?.(content)
+        }
+      }
+      if (parsed.usage) {
+        promptTokens = parsed.usage.prompt_tokens ?? 0
+        completionTokens = parsed.usage.completion_tokens ?? 0
+      }
+    }
+
+    const processBuffer = () => {
+      let idx: number
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, idx).trim()
+        buffer = buffer.slice(idx + 1)
+        handleLine(line)
+      }
+    }
+
     while (true) {
       let chunk: ReadableStreamReadResult<Uint8Array>
       try {
@@ -97,44 +139,14 @@ export async function streamChat(
         throw new TransientError(`读取中断：${String(e)}`)
       }
       if (chunk.done) break
-      lastChunk = Date.now()
+      lastChunkAt = Date.now()
       buffer += decoder.decode(chunk.value, { stream: true })
-
-      // 按行切分 SSE
-      let idx: number
-      while ((idx = buffer.indexOf('\n')) >= 0) {
-        const line = buffer.slice(0, idx).trim()
-        buffer = buffer.slice(idx + 1)
-        if (!line.startsWith('data:')) continue
-        const data = line.slice(5).trim()
-        if (data === '[DONE]') continue
-        if (!data) continue
-
-        let parsed: any
-        try {
-          parsed = JSON.parse(data)
-        } catch {
-          continue
-        }
-
-        const choice = parsed.choices?.[0]
-        if (choice?.delta) {
-          const d = choice.delta
-          if (typeof d.reasoning_content === 'string' && d.reasoning_content) {
-            reasoning += d.reasoning_content
-            cb.onReasoning?.(reasoning)
-          }
-          if (typeof d.content === 'string' && d.content) {
-            content += d.content
-            cb.onContent?.(content)
-          }
-        }
-        if (parsed.usage) {
-          promptTokens = parsed.usage.prompt_tokens ?? 0
-          completionTokens = parsed.usage.completion_tokens ?? 0
-        }
-      }
+      processBuffer()
     }
+
+    // 冲刷解码器余量，处理最后一个没有换行符的 SSE 片段，避免末条消息丢失
+    buffer += decoder.decode()
+    processBuffer()
 
     // provider 未给 usage 时估算
     if (!promptTokens && completionTokens === 0) {

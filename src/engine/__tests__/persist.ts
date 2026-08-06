@@ -13,7 +13,7 @@ function check(name: string, cond: boolean, detail?: string) {
 
 // 模拟 store 的 saveState/loadState 往返：走几步 → 序列化关键字段 → 还原到新 Game
 const g = new Game()
-const moves = ['h2e2', 'h9g7', 'b0c2', 'b9c7', 'c2e3']
+const moves = ['h2e2', 'h9g7', 'b0c2', 'b9c7', 'h0g2']
 for (const m of moves) {
   const mv = g.parseMove(m)
   if (!mv || !g.tryMove(mv.from, mv.to)) {
@@ -43,8 +43,8 @@ check('还原后记谱步数一致', g2.moveHistory.length === g.moveHistory.len
 check('还原后可继续找合法走法', g2.legalMoveList.length > 0)
 check('还原后记谱可读', g2.moveHistory[0].cn.length > 0, g2.moveHistory[0].cn)
 
-// 还可继续走子
-const next = g2.parseMove('e3e4')
+// 还可继续走子（此时轮到黑方）
+const next = g2.parseMove('b7b4')
 check('还原后可继续走子', !!next && g2.tryMove(next!.from, next!.to), `turn=${g2.turn}`)
 
 check('初始棋盘仍正常', initialBoard()[0][0] === 'R')
