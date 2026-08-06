@@ -111,12 +111,13 @@ function check(name: string, cond: boolean, detail?: string) {
   // 红兵 e3：未过河只能前进
   const p1 = genLegalMoves(b, 'red').filter((m) => m.from.rank === 3 && m.from.file === 4)
   check('未过河兵 e3 只能前进', p1.length === 1 && p1[0].to.rank === 4, `got ${p1.length}`)
-  // 过河：把兵放到 e5（过河），可进/横/退
+  // 过河：把兵放到 e5（过河），可进/横，但不能退
   const b2 = initialBoard()
   b2[5][4] = 'P'
   b2[3][4] = null
   const p2 = genLegalMoves(b2, 'red').filter((m) => m.from.rank === 5 && m.from.file === 4)
-  check('过河兵 e5 走法 = 4', p2.length === 4, `got ${p2.length}`)
+  check('过河兵 e5 走法 = 3', p2.length === 3, `got ${p2.length}`)
+  check('过河兵不能后退', !p2.some((m) => m.to.rank === 4 && m.to.file === 4), JSON.stringify(p2.map((m) => m.to)))
 }
 
 // 9. 将死判定

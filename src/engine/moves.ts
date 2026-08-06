@@ -148,13 +148,12 @@ function pseudoMoves(board: Board, pos: Pos, side: Side): Pos[] {
       break
     }
     case 'P': {
-      // 兵：未过河只能前进，过河后可左右、可退（后退仅过河后）
+      // 兵：未过河只能前进；过河后可前进或横走，但始终不能后退
       const crossed = side === 'red' ? rank >= 5 : rank <= 4
       add(rank + forward, file) // 前进
       if (crossed) {
         add(rank, file + 1)
         add(rank, file - 1)
-        add(rank - forward, file) // 后退
       }
       break
     }
