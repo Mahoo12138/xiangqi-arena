@@ -49,7 +49,7 @@ function toggle(n: number) {
       </template>
     </div>
     <div v-else class="result">
-      <span class="big">{{ store.result.type === 'stalemate' ? '和棋 · Draw' : (store.result.winner === 'red' ? '红方胜 · Red wins' : '黑方胜 · Black wins') }}</span>
+      <span class="big">{{ store.result.type === 'draw' ? '和棋 · Draw' : (store.result.winner === 'red' ? '红方胜 · Red wins' : '黑方胜 · Black wins') }}</span>
     </div>
     <div v-if="store.error" class="error">{{ store.error }}</div>
 

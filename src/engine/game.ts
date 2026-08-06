@@ -37,14 +37,12 @@ export class Game {
 
   private updateResult() {
     if (!hasLegalMove(this.board, this.turn)) {
-      if (isInCheck(this.board, this.turn)) {
-        this.result = { type: 'checkmate', winner: opposite(this.turn) }
-      } else {
-        this.result = { type: 'stalemate' }
-      }
+      // 无合法着法：被将死或困毙，均判当前行棋方负
+      const reason = isInCheck(this.board, this.turn) ? 'checkmate' : 'stalemate'
+      this.result = { type: 'win', winner: opposite(this.turn), reason }
     } else if (this.moveCount >= 300) {
       // 封顶，避免无限对弈
-      this.result = { type: 'stalemate' }
+      this.result = { type: 'draw', reason: 'move-limit' }
     }
   }
 

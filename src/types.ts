@@ -19,7 +19,18 @@ export interface Move {
   captured: Piece | null // 被吃掉的棋子
 }
 
-export type GameResult = { type: 'checkmate'; winner: Side } | { type: 'stalemate' } | null
+// 对局结果：胜、和、或未结束。困毙（stalemate）属无合法着法被迫认负，判负方输。
+export type GameResult =
+  | {
+      type: 'win'
+      winner: Side
+      reason: 'checkmate' | 'stalemate' | 'resign' | 'timeout'
+    }
+  | {
+      type: 'draw'
+      reason: 'agreement' | 'repetition' | 'no-progress' | 'move-limit'
+    }
+  | null
 
 export interface MoveRecord {
   move: Move

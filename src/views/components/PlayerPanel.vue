@@ -12,7 +12,7 @@ const isThinking = computed(() => store.thinking === props.side)
 const outcome = computed(() => {
   const r = store.result
   if (!r) return ''
-  if (r.type === 'stalemate') return '和棋 · Draw'
+  if (r.type === 'draw') return '和棋 · Draw'
   return r.winner === props.side ? '胜 · Win' : '负 · Loss'
 })
 </script>

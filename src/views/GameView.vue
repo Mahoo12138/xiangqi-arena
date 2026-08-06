@@ -13,7 +13,7 @@ const store = useGameStore()
 // 高亮方：对局中为当前行棋方，结束后为胜方
 const activeSide = computed<Side | null>(() => {
   const r = store.result
-  if (r) return r.type === 'checkmate' ? r.winner : null
+  if (r) return r.type === 'win' ? r.winner : null
   return store.turn
 })
 </script>
@@ -59,7 +59,7 @@ const activeSide = computed<Side | null>(() => {
         <div class="turn-status" :class="store.thinking ? 'thinking' : ''">
           <span class="live-dot"></span>
           <span v-if="store.result">
-            {{ store.result.type === 'stalemate' ? '和棋 · DRAW' : (store.result.winner === 'red' ? '红方获胜 · RED WINS' : '黑方获胜 · BLACK WINS') }}
+            {{ store.result.type === 'draw' ? '和棋 · DRAW' : (store.result.winner === 'red' ? '红方获胜 · RED WINS' : '黑方获胜 · BLACK WINS') }}
           </span>
           <span v-else-if="store.thinking">对弈中 · {{ store.thinking === 'red' ? 'RED' : 'BLACK' }} 思考中</span>
           <span v-else>轮到 {{ store.turn === 'red' ? '红方 RED' : '黑方 BLACK' }}</span>
