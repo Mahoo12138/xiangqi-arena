@@ -159,6 +159,19 @@ function check(name: string, cond: boolean, detail?: string) {
   check('吃子历史记录 captured = 黑卒', rec.move.captured === 'p', `got ${rec.move.captured}`)
 }
 
+// 12. 帅/将、兵/卒 纵向记谱用步数（帅五进一 / K5+1）
+{
+  const b = initialBoard()
+  // 清空 e0 上方的 e1 以便红帅 e0->e1
+  b[1][4] = null
+  const g = new Game(b)
+  const ok = g.tryMove({ rank: 0, file: 4 }, { rank: 1, file: 4 })
+  check('帅 e0->e1 可走', ok)
+  const rec = g.moveHistory[g.moveHistory.length - 1]
+  check('帅 e0->e1 记谱 = 帅五进一', rec.cn === '帅五进一', `got ${rec.cn}`)
+  check('帅 e0->e1 记法 = K5+1', rec.wxf === 'K5+1', `got ${rec.wxf}`)
+}
+
 console.log(`\n结果: ${pass} 通过, ${fail} 失败`)
 if (fail > 0) process.exit(1)
 void renderBoard

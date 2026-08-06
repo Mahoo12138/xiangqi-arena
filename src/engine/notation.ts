@@ -50,15 +50,16 @@ export function notation(move: Move): { cn: string; wxf: string } {
   let wxf = ''
 
   if (sameFile) {
-    // 纵向移动：进/退
+    // 纵向移动：进/退。
+    // 车/炮/帅/将/兵/卒 用移动步数；马/相/仕 用目标列号。
     const action = advancingRed ? '进' : '退'
     const wxfAction = advancingRed ? '+' : '-'
-    if (type === 'R' || type === 'C') {
-      // 车/炮：进N步
+    const useStepCount = type === 'R' || type === 'C' || type === 'K' || type === 'P'
+    if (useStepCount) {
       cn = `${cnPiece}${fromNumCn}${action}${numStr(steps, side)}`
       wxf = `${wxfPiece}${fromNumAr}${wxfAction}${steps}`
     } else {
-      // 马/相/士/将/兵：进到某列
+      // 马/相/士：进到某列
       cn = `${cnPiece}${fromNumCn}${action}${toNumCn}`
       wxf = `${wxfPiece}${fromNumAr}${wxfAction}${fileFromSide(toFile, side)}`
     }
