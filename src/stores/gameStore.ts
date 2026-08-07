@@ -329,10 +329,11 @@ export const useGameStore = defineStore('game', () => {
     currentAborter?.()
   }
 
-  // 中止在途请求并暂停对局（离开对局页时调用，避免后台继续烧 Token）
-  function abortAndPause() {
+  // 离开对局页：中止在途请求、暂停，并自动保存当前局，避免后台继续烧 Token
+  async function leaveGame() {
     invalidateGame()
     playing.value = false
+    if (activeGameId.value) await saveCurrent('active')
   }
 
   // 中止并立即重试当前行动方的一步：等待旧任务真正结束后再启动新任务
@@ -630,7 +631,7 @@ export const useGameStore = defineStore('game', () => {
     deleteGame,
     loadGames,
     stopTurn,
-    abortAndPause,
+    leaveGame,
     retryTurn,
     humanMove,
     pause,

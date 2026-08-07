@@ -54,7 +54,7 @@ async function remove(s: GameSummary) {
       <h2>我的对局 · Match History</h2>
       <div class="head-actions">
         <button class="btn ghost" @click="store.loadGames">刷新 · Refresh</button>
-        <button class="btn" @click="router.push('/config')">新建对局 · New</button>
+        <button v-if="!store.activeGameId" class="btn" @click="router.push('/config')">新建对局 · New</button>
       </div>
     </div>
     <p class="hint">所有对局与每一步的思维链都保存在本机 IndexedDB。被其他标签页正在执行的对局会显示「占用」，无法在此续走。</p>

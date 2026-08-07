@@ -41,7 +41,6 @@ const activeSide = computed<Side | null>(() => {
       <button v-if="store.thinking" class="btn retry" @click="store.retryTurn">重试此步 · Retry</button>
       <button v-if="store.moveCount > 0 || store.thinking" class="btn ghost" @click="store.abandonCurrent">弃局重开 · Discard</button>
       <button class="btn ghost" @click="router.push('/history')">对局 · History</button>
-      <button class="btn ghost" @click="router.push('/config')">配置 · Config</button>
       <span class="tip">空格 Space = 暂停/继续</span>
     </div>
 
