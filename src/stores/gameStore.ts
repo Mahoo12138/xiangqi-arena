@@ -79,6 +79,11 @@ function cloneConfig(cfg: MatchConfig): MatchConfig {
   return JSON.parse(JSON.stringify(cfg))
 }
 
+// 深拷贝为纯数据并剥离 Vue 响应式代理（IndexedDB 的结构化克隆无法克隆 Proxy）。
+function plain<T>(x: T): T {
+  return JSON.parse(JSON.stringify(x))
+}
+
 function toSummary(doc: GameDoc): GameSummary {
   return {
     id: doc.id,
@@ -189,7 +194,7 @@ export const useGameStore = defineStore('game', () => {
         leasUntil = existing.leasUntil
       }
     }
-    const doc: GameDoc = {
+    const doc: GameDoc = plain({
       id,
       createdAt: currentCreatedAt,
       updatedAt: Date.now(),
@@ -201,7 +206,7 @@ export const useGameStore = defineStore('game', () => {
       moves: game.value.moveHistory,
       tabClaim,
       leasUntil,
-    }
+    })
     try {
       await putGame(doc)
       await refreshList()
@@ -386,18 +391,20 @@ export const useGameStore = defineStore('game', () => {
     rec.reasoning = meta.reasoning
     rec.error = meta.error
     syncBoard()
-    void saveCurrent('active')
     return true
   }
 
-  // 人类走子
-  function humanMove(from: Pos, to: Pos): boolean {
+  // 人类走子：落子后等待落库，避免刷新即丢步
+  async function humanMove(from: Pos, to: Pos): Promise<boolean> {
     if (result.value) return false
     if (thinking.value) return false
     const side = turn.value
     if (currentPlayer(side).isHuman === false) return false
     const ok = applyMove({ from, to }, { cn: '', wxf: '', thinkMs: 0, tokens: 0, reasoning: '' })
-    if (ok) kick()
+    if (ok) {
+      await saveCurrent('active')
+      kick()
+    }
     return ok
   }
 
@@ -425,7 +432,7 @@ export const useGameStore = defineStore('game', () => {
       return
     }
     playing.value = true
-    void saveCurrent('active')
+    await saveCurrent('active')
     kick()
   }
 
@@ -543,6 +550,7 @@ export const useGameStore = defineStore('game', () => {
           reasoning: finalReasoning,
           error: finalError,
         })
+        await saveCurrent('active')
       } else if (!stopped) {
         throw new Error(finalError || 'AI 未能给出合法走法')
       }

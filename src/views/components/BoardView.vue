@@ -50,7 +50,7 @@ function isTarget(rank: number, file: number): boolean {
   return legalTargets.value.some((t) => t.rank === rank && t.file === file)
 }
 
-function onCell(rank: number, file: number) {
+async function onCell(rank: number, file: number) {
   const piece = store.board[rank][file]
   if (!selected.value) {
     // 选择己方棋子
@@ -60,7 +60,7 @@ function onCell(rank: number, file: number) {
     return
   }
   if (isTarget(rank, file)) {
-    const ok = store.humanMove(selected.value, { rank, file })
+    const ok = await store.humanMove(selected.value, { rank, file })
     if (ok) selected.value = null
     return
   }

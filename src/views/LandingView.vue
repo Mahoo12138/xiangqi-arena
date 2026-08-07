@@ -4,6 +4,11 @@ import { useGameStore } from '../stores/gameStore'
 const router = useRouter()
 const store = useGameStore()
 
+async function quickStart() {
+  await store.createGame(store.config)
+  router.push('/game')
+}
+
 const FEATURES = [
   {
     no: '壹',
@@ -48,7 +53,7 @@ const FEATURES = [
         <p class="lead en">Two large language models battle on the Xiangqi board — reasoning, notation and token usage, live.</p>
         <div class="actions">
           <button class="btn" @click="router.push('/config')">配置对局 · Configure</button>
-          <button class="btn ghost" @click="router.push('/game')">直接开局 · Quick Start</button>
+          <button class="btn ghost" @click="quickStart">直接开局 · Quick Start</button>
         </div>
       </div>
     </div>

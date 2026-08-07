@@ -14,7 +14,8 @@
     "test:persist": "vite-node src/engine/__tests__/persist.ts",
     "test:api": "vite-node src/api/__tests__/timeout.ts && vite-node src/api/__tests__/first-byte-timeout.ts",
     "test:db": "vite-node src/db/__tests__/indexeddb.test.ts",
-    "test": "npm run test:engine && npm run test:format && npm run test:persist && npm run test:api && npm run test:db"
+    "test:store": "vite-node src/stores/__tests__/persistence.test.ts",
+    "test": "npm run test:engine && npm run test:format && npm run test:persist && npm run test:api && npm run test:db && npm run test:store"
   },
   "dependencies": {
     "pinia": "^2.2.6",
