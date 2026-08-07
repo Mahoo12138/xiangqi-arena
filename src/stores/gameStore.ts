@@ -244,6 +244,11 @@ export const useGameStore = defineStore('game', () => {
   async function createGame(cfg: MatchConfig) {
     invalidateGame()
     stopTimer()
+    // 保存并释放当前局（如有），使其在历史中可续走
+    if (activeGameId.value) {
+      playing.value = false
+      await saveCurrent('active')
+    }
     const id = crypto.randomUUID()
     currentCreatedAt = Date.now()
     config.value = cloneConfig(cfg)

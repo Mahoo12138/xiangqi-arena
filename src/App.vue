@@ -1,8 +1,3 @@
-<script setup lang="ts">
-import { useGameStore } from './stores/gameStore'
-const store = useGameStore()
-</script>
-
 <template>
   <div class="shell">
     <nav class="topbar">
@@ -14,7 +9,7 @@ const store = useGameStore()
       <nav class="links">
         <RouterLink to="/game">对局</RouterLink>
         <RouterLink to="/history">历史</RouterLink>
-        <RouterLink v-if="!store.activeGameId" to="/config">配置</RouterLink>
+        <RouterLink to="/config">配置</RouterLink>
       </nav>
     </nav>
     <main class="content">
