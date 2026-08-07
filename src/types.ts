@@ -49,8 +49,48 @@ export interface PlayerConfig {
   name: string
 }
 
+export interface MatchConfig {
+  red: PlayerConfig
+  black: PlayerConfig
+}
+
 export interface GameStatus {
   result: GameResult
   turn: Side
   moveCount: number
+}
+
+// IndexedDB 中持久化的完整对局文档：状态 + 每步 MoveRecord（含思维链 reasoning 与决策记谱）
+export type GameStatusFlag = 'active' | 'finished' | 'abandoned'
+
+export interface GameDoc {
+  id: string
+  createdAt: number
+  updatedAt: number
+  status: GameStatusFlag
+  config: MatchConfig
+  board: Board
+  turn: Side
+  result: GameResult
+  moves: MoveRecord[]
+  /** 正在执行该局的标签页 id，防止两标签页同时续走同一局 */
+  tabClaim?: string
+  /** tabClaim 的到期时间；过期后其它标签页可接管（处理标签页崩溃留下的死锁） */
+  leasUntil?: number
+}
+
+// 历史列表用的轻量摘要
+export interface GameSummary {
+  id: string
+  createdAt: number
+  updatedAt: number
+  status: GameStatusFlag
+  redName: string
+  redModel: string
+  blackName: string
+  blackModel: string
+  moveCount: number
+  result: GameResult
+  tabClaim?: string
+  leasUntil?: number
 }

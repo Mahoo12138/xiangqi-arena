@@ -8,6 +8,7 @@ import './style.css'
 const pinia = createPinia()
 const app = createApp(App)
 app.use(pinia)
-useGameStore() // 启动即实例化，触发状态还原与持久化监听
+const store = useGameStore() // 启动即实例化，触发状态还原
 app.use(router)
-app.mount('#app')
+// 等待 IndexedDB 载入当前对局后再挂载，避免首帧闪空棋盘
+store.ready.then(() => app.mount('#app'))

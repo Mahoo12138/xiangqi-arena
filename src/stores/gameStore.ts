@@ -1,15 +1,48 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { Game } from '../engine/game'
-import type { Board, PlayerConfig, Pos, Side } from '../types'
+import type { Board, GameDoc, GameStatusFlag, GameSummary, MatchConfig, PlayerConfig, Pos, Side } from '../types'
 import { buildPrompt, SYSTEM_PROMPT } from '../engine/format'
 import { extractMoveIndex, streamChat, TransientError } from '../api/openai'
 import { opposite } from '../engine/board'
+import { deleteGame as deleteGameDb, getAllGames, getGame, putGame } from '../db/indexeddb'
 
-const STORAGE_KEY = 'xiangqi-arena:game:v1'
 const MAX_TRANSIENT = 3 // 网络/超时类瞬态重试上限
 const MAX_INVALID = 3 // 非法走法重试上限
 const MAX_ATTEMPTS = 6 // 总尝试兜底
+const LEASE_MS = 30_000 // 标签页占用租约时长；过期后其它标签页可接管
+
+// 每标签页独立的当前对局指针与占用标记（sessionStorage，非 localStorage，天然每标签页一份）
+const ACTIVE_KEY = 'xiangqi-arena:active'
+const TAB_KEY = 'xiangqi-arena:tab'
+
+function readActiveGameId(): string | null {
+  try {
+    return sessionStorage.getItem(ACTIVE_KEY)
+  } catch {
+    return null
+  }
+}
+function writeActiveGameId(id: string | null) {
+  try {
+    if (id) sessionStorage.setItem(ACTIVE_KEY, id)
+    else sessionStorage.removeItem(ACTIVE_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+function readTabId(): string {
+  try {
+    let id = sessionStorage.getItem(TAB_KEY)
+    if (!id) {
+      id = crypto.randomUUID()
+      sessionStorage.setItem(TAB_KEY, id)
+    }
+    return id
+  } catch {
+    return `tab-${Date.now()}`
+  }
+}
 
 // 单次请求总时长：随棋局深入自适应延长（后期每步推理久），可用环境变量覆盖
 const TOTAL_BASE = 600_000 // 开局基准 10 分钟
@@ -19,11 +52,6 @@ const ENV_TOTAL = Number(import.meta.env.VITE_LLM_TOTAL_TIMEOUT_MS)
 function totalTimeoutFor(moveCount: number): number {
   if (Number.isFinite(ENV_TOTAL) && ENV_TOTAL > 0) return ENV_TOTAL
   return Math.min(TOTAL_MAX, TOTAL_BASE + moveCount * TOTAL_STEP)
-}
-
-export interface MatchConfig {
-  red: PlayerConfig
-  black: PlayerConfig
 }
 
 // 从环境变量 VITE_LLM_MODELS（逗号分隔）解析可用模型列表
@@ -47,6 +75,27 @@ function backoff(n: number) {
   return 1000 * Math.pow(2, n - 1) + Math.random() * 250
 }
 
+function cloneConfig(cfg: MatchConfig): MatchConfig {
+  return JSON.parse(JSON.stringify(cfg))
+}
+
+function toSummary(doc: GameDoc): GameSummary {
+  return {
+    id: doc.id,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+    status: doc.status,
+    redName: doc.config.red.name,
+    redModel: doc.config.red.model,
+    blackName: doc.config.black.name,
+    blackModel: doc.config.black.model,
+    moveCount: doc.moves.length,
+    result: doc.result,
+    tabClaim: doc.tabClaim,
+    leasUntil: doc.leasUntil,
+  }
+}
+
 export const useGameStore = defineStore('game', () => {
   const models = ref<string[]>(availableModels())
   const defaultModel = models.value[0] || 'deepseek-v4-flash-0731'
@@ -68,6 +117,12 @@ export const useGameStore = defineStore('game', () => {
   const error = ref<string | null>(null)
   const busy = ref(false)
 
+  // 多棋局注册表（IndexedDB 摘要）
+  const games = ref<GameSummary[]>([])
+  const activeGameId = ref<string | null>(null)
+  const tabId = readTabId()
+  let currentCreatedAt = Date.now()
+
   let timer: ReturnType<typeof setInterval> | null = null
   let startedAt = 0
 
@@ -75,9 +130,9 @@ export const useGameStore = defineStore('game', () => {
   let currentAborter: (() => void) | null = null
   let manualAbort = false
 
-  // 对局代次：重新开局/弃局/读档时递增，使旧 AI 请求的响应作废
+  // 对局代次：切换/重开时递增，使旧 AI 请求的响应作废
   let gameEpoch = 0
-  // 当前在途 AI 回合的 Promise，供重试/重新开局等待其结束
+  // 当前在途 AI 回合的 Promise，供重试/切换等待其结束
   let activeTurn: Promise<void> | null = null
 
   // 使当前对局失效：作废在途请求，防止旧响应落到新棋盘
@@ -92,7 +147,7 @@ export const useGameStore = defineStore('game', () => {
   const records = computed(() => game.value.moveHistory)
   const moveCount = computed(() => game.value.moveCount)
 
-  // 是否有未完成的对局（用于「继续上次对局」入口）
+  // 当前局已有走子且未结束（用于首页「继续当前对局」入口）
   const hasResumable = computed(() => moveCount.value > 0 && !result.value)
 
   function currentPlayer(side: Side): PlayerConfig {
@@ -103,90 +158,169 @@ export const useGameStore = defineStore('game', () => {
     board.value = game.value.board.map((row) => row.slice())
   }
 
-  /* ---------- 持久化 ---------- */
+  /* ---------- 持久化（IndexedDB 多局） ---------- */
 
-  function saveState() {
+  async function refreshList() {
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          version: 1,
-          config: config.value,
-          board: game.value.board,
-          turn: game.value.turn,
-          result: game.value.result,
-          moves: game.value.moveHistory,
-          playing: playing.value,
-        }),
-      )
+      games.value = (await getAllGames()).map(toSummary)
     } catch {
-      /* 配额/隐私模式等，忽略 */
+      /* IDB 不可用（隐私模式等），保持空列表 */
     }
   }
 
-  function loadState() {
-    invalidateGame() // 作废任何在途请求
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (!raw) return
-      const d = JSON.parse(raw)
-      if (d.version !== 1) return
-      const g = new Game()
-      g.board = d.board
-      g.turn = d.turn
-      g.result = d.result
-      g.moveHistory = d.moves
-      game.value = g
-      syncBoard()
-      if (d.config) {
-        config.value = {
-          red: { ...makeConfig().red, ...d.config.red, side: 'red' },
-          black: { ...makeConfig().black, ...d.config.black, side: 'black' },
-        }
+  // 是否被其它标签页占用（租约未过期）
+  function claimedByOther(doc: GameDoc | undefined): boolean {
+    return !!doc?.tabClaim && doc.tabClaim !== tabId && (doc.leasUntil ?? 0) > Date.now()
+  }
+
+  // 把当前内存对局持久化。仅在播放中才写入本标签页占用；非播放时不覆盖其它标签页的占用。
+  async function saveCurrent(status: GameStatusFlag) {
+    const id = activeGameId.value
+    if (!id) return
+    let tabClaim: string | undefined
+    let leasUntil: number | undefined
+    if (playing.value) {
+      tabClaim = tabId
+      leasUntil = Date.now() + LEASE_MS
+    } else {
+      const existing = await getGame(id)
+      if (existing?.tabClaim && existing.tabClaim !== tabId) {
+        tabClaim = existing.tabClaim
+        leasUntil = existing.leasUntil
       }
-      // 还原局但默认不自动续走，避免刷新即消耗 Token
-      playing.value = false
+    }
+    const doc: GameDoc = {
+      id,
+      createdAt: currentCreatedAt,
+      updatedAt: Date.now(),
+      status,
+      config: config.value,
+      board: game.value.board,
+      turn: game.value.turn,
+      result: game.value.result,
+      moves: game.value.moveHistory,
+      tabClaim,
+      leasUntil,
+    }
+    try {
+      await putGame(doc)
+      await refreshList()
     } catch {
-      clearState()
+      /* IDB 不可用，忽略 */
     }
   }
 
-  function clearState() {
-    try {
-      localStorage.removeItem(STORAGE_KEY)
-    } catch {
-      /* ignore */
-    }
+  async function loadGames() {
+    await refreshList()
+  }
+
+  // 载入一个对局为当前局。autoplay 仅决定 playing 初值，不在此处直接 kick。
+  function loadDocIntoActive(doc: GameDoc, autoplay: boolean) {
+    invalidateGame()
+    stopTimer()
+    const g = new Game()
+    g.board = doc.board
+    g.turn = doc.turn
+    g.result = doc.result
+    g.moveHistory = doc.moves
+    game.value = g
+    syncBoard()
+    config.value = cloneConfig(doc.config)
+    currentCreatedAt = doc.createdAt
+    activeGameId.value = doc.id
+    writeActiveGameId(doc.id)
+    playing.value = autoplay
+    error.value = null
   }
 
   /* ---------- 生命周期 ---------- */
 
-  function startGame() {
-    invalidateGame() // 作废旧请求，避免其响应落到新棋盘
+  // 用配置创建一局并自动开局
+  async function createGame(cfg: MatchConfig) {
+    invalidateGame()
     stopTimer()
+    const id = crypto.randomUUID()
+    currentCreatedAt = Date.now()
+    config.value = cloneConfig(cfg)
     game.value = new Game()
     syncBoard()
+    activeGameId.value = id
+    writeActiveGameId(id)
     playing.value = true
     error.value = null
-    clearState()
-    saveState()
+    await saveCurrent('active')
+    await refreshList()
     kick()
   }
 
-  function updateConfig(cfg: MatchConfig) {
-    config.value = cfg
-    saveState()
+  // 载入一局（只查看，不自动走子）
+  async function viewGame(id: string): Promise<boolean> {
+    const doc = await getGame(id)
+    if (!doc) return false
+    loadDocIntoActive(doc, false)
+    await refreshList()
+    return true
   }
 
-  // 弃局：清空内存与持久化，恢复为未开局状态（不自动走棋）
-  function discard() {
-    invalidateGame() // 作废旧请求并作废其响应，避免写回新棋盘
+  // 载入一局并恢复（不自动播放，避免刷新即烧 Token）
+  async function resumeGame(id: string): Promise<boolean> {
+    if (claimedByOther(await getGame(id))) {
+      error.value = '该对局正在另一个标签页中运行，无法在此续走'
+      return false
+    }
+    const doc = await getGame(id)
+    if (!doc) return false
+    loadDocIntoActive(doc, false)
+    await saveCurrent(doc.status)
+    return true
+  }
+
+  // 载入一局并立即续走（历史页「续走」）
+  async function continueGame(id: string): Promise<boolean> {
+    if (claimedByOther(await getGame(id))) {
+      error.value = '该对局正在另一个标签页中运行，无法在此续走'
+      return false
+    }
+    const doc = await getGame(id)
+    if (!doc) return false
+    loadDocIntoActive(doc, true)
+    await saveCurrent(doc.status)
+    await refreshList()
+    kick()
+    return true
+  }
+
+  // 弃局：保存当前局为已放弃，并清空当前局
+  async function abandonCurrent() {
+    invalidateGame()
     stopTimer()
+    playing.value = false
+    if (activeGameId.value) await saveCurrent('abandoned')
+    activeGameId.value = null
+    writeActiveGameId(null)
     game.value = new Game()
     syncBoard()
-    playing.value = false
     error.value = null
-    clearState()
+    await refreshList()
+  }
+
+  // 删除一局（若为当前局则一并清空）
+  async function deleteGame(id: string) {
+    if (activeGameId.value === id) {
+      invalidateGame()
+      stopTimer()
+      playing.value = false
+      activeGameId.value = null
+      writeActiveGameId(null)
+      game.value = new Game()
+      syncBoard()
+    }
+    try {
+      await deleteGameDb(id)
+    } catch {
+      /* ignore */
+    }
+    await refreshList()
   }
 
   // 中止当前在途的 AI 请求（模型思维链卡死时干预）
@@ -195,8 +329,7 @@ export const useGameStore = defineStore('game', () => {
     currentAborter?.()
   }
 
-  // 中止在途请求并暂停对局（离开对局页时调用，避免后台继续烧 Token）。
-  // 通过作废代次保证被中止的请求不会把走法写回棋盘。
+  // 中止在途请求并暂停对局（离开对局页时调用，避免后台继续烧 Token）
   function abortAndPause() {
     invalidateGame()
     playing.value = false
@@ -252,7 +385,7 @@ export const useGameStore = defineStore('game', () => {
     rec.reasoning = meta.reasoning
     rec.error = meta.error
     syncBoard()
-    saveState()
+    void saveCurrent('active')
     return true
   }
 
@@ -283,15 +416,25 @@ export const useGameStore = defineStore('game', () => {
     playing.value = false
   }
 
-  // 继续
-  function resume() {
+  // 继续（开始播放前校验占用，避免两标签页同写一局）
+  async function resume() {
+    if (result.value) return
+    if (activeGameId.value && claimedByOther(await getGame(activeGameId.value))) {
+      error.value = '该对局正在另一个标签页中运行，无法在此续走'
+      return
+    }
     playing.value = true
+    void saveCurrent('active')
     kick()
   }
 
   // 单步（只走一步 AI），不进入连续对弈
-  function step() {
+  async function step() {
     if (result.value) return
+    if (activeGameId.value && claimedByOther(await getGame(activeGameId.value))) {
+      error.value = '该对局正在另一个标签页中运行，无法在此续走'
+      return
+    }
     const side = turn.value
     if (currentPlayer(side).isHuman) return
     playing.value = false
@@ -421,7 +564,27 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  /* ---------- 标签页后台 / 卸载 ---------- */
+  /* ---------- 初始化 / 标签页后台 ---------- */
+
+  let resolveReady: (() => void) | null = null
+  const ready = new Promise<void>((r) => {
+    resolveReady = r
+  })
+
+  async function init() {
+    try {
+      await loadGames()
+      const id = readActiveGameId()
+      if (id) {
+        const doc = await getGame(id)
+        if (doc) loadDocIntoActive(doc, false)
+      }
+    } catch {
+      /* IDB/存储不可用 */
+    } finally {
+      resolveReady?.()
+    }
+  }
 
   if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => {
@@ -433,17 +596,20 @@ export const useGameStore = defineStore('game', () => {
     })
   }
   if (typeof window !== 'undefined') {
-    window.addEventListener('pagehide', saveState)
+    window.addEventListener('pagehide', () => void saveCurrent('active'))
   }
 
-  // 启动时还原上次对局
-  loadState()
+  void init()
 
   return {
     game,
     board,
     config,
     models,
+    games,
+    activeGameId,
+    tabId,
+    ready,
     playing,
     thinking,
     liveReasoning,
@@ -456,9 +622,13 @@ export const useGameStore = defineStore('game', () => {
     moveCount,
     hasResumable,
     currentPlayer,
-    startGame,
-    updateConfig,
-    discard,
+    createGame,
+    viewGame,
+    resumeGame,
+    continueGame,
+    abandonCurrent,
+    deleteGame,
+    loadGames,
     stopTurn,
     abortAndPause,
     retryTurn,

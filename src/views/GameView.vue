@@ -34,12 +34,13 @@ const activeSide = computed<Side | null>(() => {
 <template>
   <div class="game">
     <div class="controls">
-      <button class="btn" @click="store.startGame">开局 · New</button>
+      <button class="btn" @click="store.createGame(store.config)">开局 · New</button>
       <button v-if="store.playing && !store.result" class="btn" @click="store.pause">暂停 · Pause</button>
       <button v-else class="btn" @click="store.resume">继续 · Resume</button>
       <button class="btn ghost" @click="store.step">单步 · Step</button>
       <button v-if="store.thinking" class="btn retry" @click="store.retryTurn">重试此步 · Retry</button>
-      <button v-if="store.moveCount > 0 || store.thinking" class="btn ghost" @click="store.discard">弃局重开 · Discard</button>
+      <button v-if="store.moveCount > 0 || store.thinking" class="btn ghost" @click="store.abandonCurrent">弃局重开 · Discard</button>
+      <button class="btn ghost" @click="router.push('/history')">对局 · History</button>
       <button class="btn ghost" @click="router.push('/config')">配置 · Config</button>
       <span class="tip">空格 Space = 暂停/继续</span>
     </div>

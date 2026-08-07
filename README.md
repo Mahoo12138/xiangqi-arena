@@ -8,7 +8,8 @@ Pinia 管理对局状态与调度，Vue 负责展示。
 - **引擎**（`src/engine`）：纯 TypeScript 棋规引擎——走法、将军/将死/困毙判定、中文与 WXF 记谱。
 - **API**（`src/api`）：OpenAI 兼容流式接口（`/api/chat/completions`），带分阶段超时与解析。
 - **状态**（`src/stores`）：对局状态、AI 调度与持久化。
-- **UI**（`src/views`）：Vue 3 + Pinia + Vue Router。
+- **存储**（`src/db`）：IndexedDB 多对局持久化（每局状态 + 每步思维链）。
+- **UI**（`src/views`）：Vue 3 + Pinia + Vue Router，含「我的对局」历史页。
 
 ## 快速开始
 
@@ -19,6 +20,13 @@ npm run dev            # Vite 开发服务器（含 /api 开发代理）
 ```
 
 > 开发模式下 `/api/*` 由 Vite 的 `configureServer` 代理转发，API Key 不进入浏览器。
+> Vite 代理天然支持并发：多个标签页同时调 `/api/chat/completions` 各自独立，互不阻塞。
+
+### 多标签页多棋局
+
+- 每个标签页用 `sessionStorage` 记住自己的「当前对局」，天然各自独立；对局数据统一存 IndexedDB。
+- 正在执行的对局带「占用租约」，同一局不会被两个标签页同时续走（标签页崩溃后租赁 30s 过期可被接管）。
+- 并发瓶颈在上游模型商家的速率/TPM 限制，以及生产服务器每 IP 的 `RATE_LIMIT_MAX`（多标签页时按需调大）。
 
 ## 生产部署
 

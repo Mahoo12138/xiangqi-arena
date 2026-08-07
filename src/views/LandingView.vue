@@ -30,8 +30,8 @@ const FEATURES = [
   <div class="landing">
     <div v-if="store.hasResumable" class="resume-banner">
       <span class="rb-text">有未完成的对局 · 已行 {{ store.moveCount }} 步</span>
-      <button class="btn" @click="router.push('/game')">继续对局 · Resume</button>
-      <button class="btn ghost" @click="store.discard(); router.push('/game')">弃局重开 · New</button>
+      <button class="btn" @click="router.push('/game')">继续当前 · Resume</button>
+      <button class="btn ghost" @click="router.push('/history')">所有对局 · History</button>
     </div>
 
     <div class="hero">

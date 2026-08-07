@@ -2,7 +2,7 @@
 import { reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '../stores/gameStore'
-import type { MatchConfig } from '../stores/gameStore'
+import type { MatchConfig } from '../types'
 
 const router = useRouter()
 const store = useGameStore()
@@ -14,8 +14,8 @@ const draft = reactive<MatchConfig>({
 
 const models = store.models
 
-function save() {
-  store.updateConfig(JSON.parse(JSON.stringify(draft)))
+async function save() {
+  await store.createGame(JSON.parse(JSON.stringify(draft)))
   router.push('/game')
 }
 </script>

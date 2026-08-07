@@ -13,7 +13,8 @@
     "test:format": "vite-node src/engine/__tests__/format.ts",
     "test:persist": "vite-node src/engine/__tests__/persist.ts",
     "test:api": "vite-node src/api/__tests__/timeout.ts && vite-node src/api/__tests__/first-byte-timeout.ts",
-    "test": "npm run test:engine && npm run test:format && npm run test:persist && npm run test:api"
+    "test:db": "vite-node src/db/__tests__/indexeddb.test.ts",
+    "test": "npm run test:engine && npm run test:format && npm run test:persist && npm run test:api && npm run test:db"
   },
   "dependencies": {
     "pinia": "^2.2.6",
@@ -23,6 +24,7 @@
   "devDependencies": {
     "@types/node": "^26.1.2",
     "@vitejs/plugin-vue": "^5.2.1",
+    "fake-indexeddb": "^6.2.5",
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
     "vite-node": "^2.1.5",
